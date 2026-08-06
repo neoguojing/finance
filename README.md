@@ -64,16 +64,21 @@ export PYTHONPATH=$PYTHONPATH:. && python main.py plan --total 10000
 export PYTHONPATH=$PYTHONPATH:. && python main.py rebalance
 ```
 
-#### 4. A股智能定投规划 (新)
+#### 4. A股智能定投规划 (简化版)
 ```bash
-# 示例：PE=20, PB=30, ERP=70, 跌幅=15%(0.15), 现金=600000, 剩余20个月
-export PYTHONPATH=$PYTHONPATH:. && python main.py ashare-invest --pe 20 --pb 30 --erp 70 --dd 0.15 --cash 600000 --months 20
+# 参数从 data/market_metrics.json 中读取
+export PYTHONPATH=$PYTHONPATH:. && python main.py ashare-invest --cash 600000 --months 20
 ```
 
-#### 5. 美股智能定投规划 (新)
+#### 5. 美股智能定投规划 (简化版)
 ```bash
-# 示例：FPE=30, PEG=40, VIX=25, 利率百分位=50, 跌幅=10%(0.1), 现金=600000, 剩余20个月
-export PYTHONPATH=$PYTHONPATH:. && python main.py us-invest --fpe 30 --peg 40 --vix 25 --fed 50 --dd 0.1 --cash 600000 --months 20
+# 参数从 data/market_metrics.json 中读取
+export PYTHONPATH=$PYTHONPATH:. && python main.py us-invest --cash 600000 --months 20
+```
+
+#### 6. 批量计算所有配置资产
+```bash
+export PYTHONPATH=$PYTHONPATH:. && python main.py invest-all --cash 600000 --months 20
 ```
 
 ---
@@ -85,6 +90,8 @@ export PYTHONPATH=$PYTHONPATH:. && python main.py us-invest --fpe 30 --peg 40 --
 | `status` | 无 | 显示总价值、各资产实际权重及偏差 | `python main.py status` |
 | `plan` | `--total` (必填) | 根据目标总额规划各资产份额 | `python main.py plan --total 10000` |
 | `rebalance` | 无 | 计算使组合回到目标配置的买卖金额 | `python main.py rebalance` |
+| `ashare-invest` | `--pe`, `--pb`, `--erp`, `--dd`, `--cash`, `--months` | 基于价值+风险模型的 A 股智能定投计算 | `python main.py ashare-invest --pe 20 --pb 30 --erp 70 --dd 0.15 --cash 600000 --months 20` |
+| `us-invest` | `--fpe`, `--peg`, `--vix`, `--fed`, `--dd`, `--cash`, `--months` | 基于成长+恐慌模型的 美股智能定投计算 | `python main.py us-invest --fpe 30 --peg 40 --vix 25 --fed 50 --dd 0.1 --cash 600000 --months 20` |
 
 ---
 

@@ -1,0 +1,15 @@
+{
+  "510300.SH": {
+    "pe_percentile": 25.0,
+    "pb_percentile": 20.0,
+    "erp_percentile": 40.0,
+    "drawdown": 0.1
+  },
+  "VOO": {
+    "forward_pe_percentile": 65.0,
+    "peg_percentile": 70.0,
+    "vix": 18.0,
+    "fed_rate_percentile": 45.0,
+    "drawdown": 0.05
+  }
+}

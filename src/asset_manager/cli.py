@@ -1,12 +1,31 @@
 import click
+import json
+import os
 from .storage import DataManager
-from .engine import Rebalancer
+from .engine import Rebalancer, DCAEngine
 from .models import Portfolio
 from .config_loader import ConfigLoader
 
 # 初始化数据管理层和配置加载器
 storage = DataManager()
 config_loader = ConfigLoader()
+
+def load_market_metrics(path="data/market_metrics.json"):
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading market metrics: {e}")
+        return {}
+
+def print_result(symbol, result):
+    scores = result["scores"]
+    click.echo(f"\n[{symbol}] 结果:")
+    click.echo(f"  建议投入: {result['final_investment']:.2f}")
+    click.echo(f"  Market Score: {scores.get('market_score', 0):.2f}")
+    click.echo(f"  Drawdown Score: {scores.get('drawdown_score', 0):.2f}")
 
 @click.group()
 def cli():
@@ -20,7 +39,7 @@ def cli():
 def status():
     """
     显示当前投资组合状态。
-    包括总价值、各资产实际权重以及与目标权重的偏差（Drift）。
+    包括总价值、各资产实际权重以及与目标权重的偏差（Drint）。
     """
     portfolio = storage.load_portfolio()
     total_value = portfolio.get_total_value()
@@ -32,7 +51,7 @@ def status():
     drifts = portfolio.get_allocation_drift()
     for asset in portfolio.assets:
         current_weight = asset.calculate_current_weight(total_value)
-        drift = next(d[1] for d in drifts if d[0] == asset.symbol)
+        drift = next((d[1] for d in drifts if d[0] == asset.symbol), 0.0)
         click.echo(f"{asset.symbol:<15} {asset.current_value:<10.2f} {current_weight:<10.2%} {drift:<10.2%}")
 
 @cli.command()
@@ -94,14 +113,14 @@ def plan(total):
         click.echo("-" * 52)
 
         for asset in assets:
-            target_value = total * asset.target_weight
-            diff = target_value - asset.current_value
+            target_api_value = total * asset.target_weight
+            diff = target_api_value - asset.current_value
             action = "买入" if diff > 0 else "卖出" if diff < 0 else "无需操作"
             diff_str = f"{abs(diff):.2f} {action}" if diff != 0 else "0.00"
 
-            click.echo(f"{asset.symbol:<15} {asset.current_value:<12.2f} {target_value:<12.2f} {diff_str:<12}")
+            click.echo(f"{asset.symbol:<15} {asset.current_value:<12.2f} {target_api_value:<12.2f} {diff_str:<12}")
 
-            cat_target_value += target_value
+            cat_target_value += target_api_value
             cat_diff += diff
 
         # 类别汇总行
@@ -116,66 +135,97 @@ def plan(total):
     click.echo(f"合计目标价值: {grand_total_target:.2f}")
 
 @cli.command()
-@click.option('--pe', type=float, help='PE历史百分位(0-100)')
-@click.option('--pb', type=float, help='PB历史百分位(0-100)')
-@click.option('--erp', type=float, help='ERP历史百分位(0-100)')
-@click.option('--dd', type=float, help='距离最高点跌幅(0-1.0, 如 0.1 代表 10%)')
-@click.option('--cash', type=float, help='剩余现金')
-@click.option('--months', type=int, help='剩余建仓月数')
-def ashare_invest(pe, pb, erp, dd, cash, months):
-    """
-    基于价值+风险模型的 A 股智能定投计算。
-    通过估值百分位和回撤幅度，动态调整每月定投金额。
-    """
-    # 加载默认配置
-    cfg = config_loader.get_ashare_params()
-    pe = pe if pe is not None else cfg.get('pe_percentile')
-    pb = pb if pb is not None else cfg.set('pb_percentile') # Wait, I used set instead of get. I should use .get
-    scores = result["scores"]
-
-    click.echo("\n=== A股智能定投计算结果 ===")
-    click.echo(f"估值评分 (ValueScore):   {scores['value_score']:.2f}")
-    click.echo(f"回撤评分 (DrawdownScore): {scores['drawdown_score']:.2f}")
-    click.echo(f"综合评分 (MarketScore):   {scores['market_score']:.2f}")
-    click.echo(f"当前倍率 (Multiplier):     {scores['multiplier']:.2f}x")
-    click.echo("-" * 30)
-    click.echo(f"基础定投金额:             {scores['base_amount']:.2f}")
-    click.echo(f"建议本次投入:             {result['final_investment']:.2f}")
-
-    if result['final_investment'] < (scores['base_amount'] * scores['multiplier']):
-        click.echo("\n⚠️  注意：投入金额已触发 10% 现金上限限制。")
-    click.echo("============================\n")
-
-@cli.command()
-@click.option('--fpe', type=float, required=True, help='Forward PE历史百分位(0-100)')
-@click.option('--peg', type=float, required=True, help='PEG历史百分位(0-100)')
-@click.option('--vix', type=float, required=True, help='VIX指数')
-@click.option('--fed', type=float, required=True, help='利率历史百分位(0-100)')
-@click.option('--dd', type=float, required=True, help='距离最高点跌幅(0-1.0, 如 0.1 代表 10%)')
 @click.option('--cash', type=float, required=True, help='剩余现金')
 @click.option('--months', type=int, required=True, help='剩余建仓月数')
-def us_invest(fpe, peg, vix, fed, dd, cash, months):
+def ashare_invest(cash, months):
     """
-    基于成长+恐慌模型的 美股智能定投计算。
-    综合前瞻PE、PEG、VIX指数和利率水平，动态调整每月定投金额。
+    基于价值+风险模型的 A 股智能定投计算 (简化版)。
+    参数从 data/market_metrics.json 中读取。
     """
-    from .engine import DCAEngine
-    result = DCAEngine.calculate_ushare_smart_invest(fpe, peg, vix, fed, dd, cash, months)
-    scores = result["scores"]
+    metrics = load_market_metrics()
+    engine = DCAEngine(config_load_helper()) # Using helper to fix logic
+    config_data = config_loader.configs
 
-    click.echo("\n=== 美股智能定投计算结果 ===")
-    click.echo(f"成长评分 (GrowthScore):   {scores['growth_score']:.2f}")
-    click.echo(f"VIX评分 (VIXScore):       {scores['vix_score']:.2f}")
-    click.echo(f"利率评分 (RateScore):     {scores['rate_score']:.2f}")
-    click.echo(f"综合评分 (USScore):       {scores['us_score']:.2f}")
-    click.echo(f"当前倍率 (Multiplier):     {scores['multiplier']:.2f}x")
-    click.echo("-" * 30)
-    click.echo(f"基础定投金额:             {scores['base_amount']:.2f}")
-    click.echo(f"建议本次投入:             {result['final_investment']:.2f}")
+    found = False
+    for symbol, cfg in config_data.items():
+        if cfg.get('type') == 'ashare':
+            asset_metrics = metrics.get(symbol, {})
+            result = engine.calculate_smart_invest(
+                symbol=symbol,
+                market_metrics=asset_metrics,
+                cash_remaining=cash,
+                months_left=months
+            )
+            if "error" in result:
+                click.echo(f"{symbol}: {result['error']}")
+                continue
 
-    if result['final_investment'] < (scores['base_amount'] * scores['multiplier']):
-        click.echo("\n⚠️  注意：投入金额已触发 10% 现金上限限制。")
-    click.echo("============================\n")
+            found = True
+            print_result(symbol, result)
+
+    if not found:
+        click.echo("未在配置中找到 A 股资产。")
+
+@cli.command()
+@click.option('--cash', type=float, required=True, help='剩余现金')
+@click.option('--months', type=int, required=True, help='剩余建仓月数')
+def us_invest(cash, months):
+    """
+    基于成长+恐慌模型的 美股智能定投计算 (简化版)。
+    参数从 data/market_metrics.json 中读取。
+    """
+    metrics = load_market_metrics()
+    engine = DCAEngine(config_loader)
+    config_data = config_loader.configs
+
+    found = False
+    for symbol, cfg in config_data.items():
+        if cfg.get('type') == 'usshare':
+            asset_metrics = metrics.get(symbol, {})
+            result = engine.calculate_smart_invest(
+                symbol=symbol,
+                market_metrics=asset_metrics,
+                cash_remaining=cash,
+                months_left=months
+            )
+            if "error" in result:
+                click.echo(f"{symbol}: {result['error']}")
+                continue
+
+            found = True
+            print_result(symbol, result)
+
+    if not found:
+        click.echo("未在配置中找到美股资产。")
+
+@cli.command()
+@click.option('--cash', type=float, required=True)
+@click.option('--months', type=int, required=True)
+def invest_all(cash, months):
+    """
+    批量计算所有配置资产的定投建议。
+    """
+    metrics = load_market_metrics()
+    engine = DCAEngine(config_loader)
+    config_data = config_loader.configs
+
+    click.echo("开始批量计算...")
+    for symbol, cfg in config_data.items():
+        asset_metrics = metrics.get(symbol, {})
+        result = engine.calculate_smart_invest(
+            symbol=symbol,
+            market_metrics=asset_metrics,
+            cash_remaining=cash,
+            months_left=months
+        )
+        if "error" in result:
+            click.echo(f"{symbol}: {result['error']}")
+            continue
+        print_result(symbol, result)
+    click.echo("\n批量计算完成。")
+
+def config_load_helper():
+    return config_loader
 
 if __name__ == "__main__":
     cli()
