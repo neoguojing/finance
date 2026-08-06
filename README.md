@@ -53,7 +53,7 @@ Investment = BaseAmount × MarketMultiplier × PositionFactor × CashSafetyFacto
 项目保留两个核心配置文件：
 
 | 文件 | 是否手工维护 | 职责 |
-| :--- | :--- | :--- |
+| :--- | :--- 智能 | 维护持仓、目标权重、原始市场指标和策略参数。 |
 | `data/weights.json` | 是 | 维护资产类别、目标权重、当前持仓；这是组合结构的唯一来源。 |
 | `data/config.json` | 半自动 | 维护每个可定投工具的市场类型、原始市场指标、特征权重，以及策略级参数。可通过 `weights.json` 生成初稿。 |
 
@@ -120,25 +120,34 @@ Investment = BaseAmount × MarketMultiplier × PositionFactor × CashSafetyFacto
 - `max_single_invest_percent`：单个工具本期投入上限，占剩余现金比例。
 - `cash_safety.normal` / `cash_safety.low_cash_or_late_stage`：正常阶段和现金紧张/最后阶段的现金安全因子。
 
-## 从 `weights.json` 生成 `config.json`
+## 使用 `sync-config` 同步配置
 
 当你新增或删除定投工具后，运行：
 
 ```bash
-python main.py generate-config
+python main.py sync-config
+```
+
+此命令会执行两步操作：
+1. **同步结构**：根据 `weights.json` 自动生成或刷新 `config.json` 中的资产列表。
+2. **抓取指标**：从互联网获取最新的市场指标（如 PE/PB 分位、VIX 等）并填入配置。
+
+如果你只想更新资产结构而不希望触发网络请求，可以使用：
+
+```bash
+python main.py sync-config --structure-only
 ```
 
 生成规则：
-
 - 只为 `weights.json` 中 **股票** 类别下的工具生成定投配置。
 - 名称包含 `标普` 或 `纳斯达克` 的工具默认为 `us`。
 - 其他股票工具默认为 `ashare`。
-- 如果 `config.json` 中已有该工具的 `metrics`，生成时会保留原指标，避免覆盖你手工维护的数据。
+- 如果 `config.json` 中已有该工具的 `metrics`，生成的结构化操作会尽量保留原指标（在 `--structure-only` 模式下），但在完整同步时会刷新数据。
 
 推荐流程：
 
 1. 在 `data/weights.json` 中维护目标权重和当前持仓。
-2. 运行 `python main.py generate-config` 生成或刷新可定投工具。
+2. 运行 `python main.py sync-config` 生成或刷新可定投工具。
 3. 在 `data/config.json` 中补充/更新每个工具的估值和市场指标。
 4. 运行 `python main.py invest --cash <剩余现金> --months <剩余月数>` 得到本期定投计划。
 
@@ -187,7 +196,7 @@ MarketScore = 0.70 × ValueScore + 0.30 × DrawdownScore
 
 ```text
 GrowthScore = 0.45 × (100 - ForwardPE%) + 0.30 × (100 - PEG%) + 0.25 × DrawdownScore
-VIXScore = min(VIX / 40, 1) × 100
+VIXScore = min(VIS / 40, 1) × 100
 RateScore = 100 - FedRatePercentile
 USScore = 0.50 × GrowthScore + 0.30 × VIXScore + 0.20 × RateScore
 ```
@@ -221,13 +230,25 @@ pip install -r requirements.txt
 python main.py status
 ```
 
-生成或刷新配置：
+规划目标持仓（基于给定总额）：
 
 ```bash
-python main.py generate-config
+python main.py plan --total 1000000
 ```
 
-计算所有定投工具的本期金额和比例：
+同步配置（包含结构生成与指标更新）：
+
+```bash
+python main.py sync-config
+```
+
+仅同步资产结构（不抓取网络数据）：
+
+```bash 
+python main.py sync-config --structure-only
+```
+
+计算本期定投计划：
 
 ```bash
 python main.py invest --cash 600000 --months 20
@@ -284,13 +305,13 @@ market_score =
 ### 新增一个定投工具
 
 1. 在 `data/weights.json` 的 `股票.assets` 中新增工具、目标权重和当前持仓。
-2. 运行 `python main.py generate-config`。
+2. 运行 `python main.py sync-config --structure-only` 更新资产结构。
 3. 在 `data/config.json` 中检查 `market` 是否正确，并补充真实 `metrics`。
 4. 运行 `python main.py invest --cash ... --months ...` 查看建议。
 
 ### 更新市场指标
 
-直接编辑 `data/config.json` 中对应工具的 `metrics`。如果之后再次运行 `generate-config`，已有指标会被保留。
+直接编辑 `data/config.json` 中对应工具的 `metrics`。或者定期运行 `python main.py sync-config` 获取最新数据。
 
 ### 更新当前持仓
 

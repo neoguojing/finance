@@ -3,6 +3,8 @@ import click
 from .config_loader import ConfigLoader
 from .engine import DCAEngine, Rebalancer
 from .storage import DataManager
+from .updater.updater import ConfigUpdater
+
 
 storage = DataManager()
 config_loader = ConfigLoader()
@@ -13,11 +15,14 @@ def print_investment(result):
     click.echo(f"\n{result['symbol']}")
     click.echo(f"  建议投入: {result['investment']:.2f}")
     click.echo(f"  定投比例: {result['investment_ratio']:.2%}")
-    click.echo(f"  市场评分: {result['market_score']:.2f}")
+    click.echo(
+        "  市场评分: "
+        f"{result['market_score']:.2f}"
+    )
     click.echo(
         "  市场特征: "
         f"估值={features['valuation_score']:.2f}, "
-        f"情绪={features['sentiment_score']:.2f}, "
+        f"情绪={round(features['sentiment_score'], 2):.2f}, " # Added rounding to be safe
         f"宏观={features['macro_score']:.2f}, "
         f"趋势={features['momentum_score']:.2f}, "
         f"波动={features['volatility_score']:.2f}"
@@ -53,29 +58,46 @@ def rebalance():
         click.echo(f"{symbol}: {action} {abs(amount):.2f}")
 
 
-@cli.command("generate-config")
-def generate_config():
-    """根据 weights.json 生成或刷新可定投工具配置。"""
+@cli.command("sync-config")
+@click.option("--structure-only", is_flag=True, help="仅更新资产结构，不抓取市场指标")
+def sync_config(structure_only):
+    """同步配置：从 weights.json 生成配置并（可选）抓取最新市场指标。"""
+    # 1. 生成基础结构
+    click.echo("正在从 weights.json 同步资产结构...")
     config = config_loader.generate_from_weights(storage.load_weights())
     config_loader.save(config)
-    click.echo(f"已生成 {len(config['assets'])} 个定投工具配置。")
+    click.echo(f"基础配置生成成功（包含 {len(config['assets'])} 个资产）。")
+
+    # 2. 如果没有指定 --structure-only，则启动更新器抓取实时指标
+    if not structure_only:
+        click.echo("正在从互联网抓取最新市场指标...")
+        updater = ConfigUpdater(config_loader)
+        updater.update_all_assets()
+        click.echo("所有可用资产的高度同步完毕。")
+    else:
+        click.echo("已跳过网络数据更新。")
 
 
 @cli.command()
-@click.option("--cash", type=float, required=True, help="剩余现金")
-@click.option("--months", type=int, required=True, help="剩余建仓月数")
-@click.argument("symbols", nargs=-1)
-def invest(cash, months, symbols):
-    """计算定投金额和每个工具的定投比例。不传 SYMBOL 时计算全部定投资产。"""
-    engine = DCAEngine(config_loader)
+@click.option("--total", type=float, required=True, help="假设的投资组合总金额 (当前持仓 + 待投入现金)")
+def plan(total: float):
+    """规划：输入总金额，查看各资产达到目标权重后的分布情况。"""
     portfolio = storage.load_portfolio()
-    plan = engine.calculate_plan(portfolio, cash, months)
-    items = plan["items"]
-    if symbols:
-        items = [item for item in items if item["symbol"] in symbols]
-    click.echo(f"本期建议总投入: {sum(item['investment'] for item in items):.2f}")
-    for result in items:
-        print_investment(result)
+    click.echo(f"\n基于总额 {total:.2f} 的目标持仓规划：")
+    click.echo("-" * 75)
+    click.echo(f"{'资产':<12} {'目标权重':>10} {'目标价值':>15} {'当前价值':>15} {'差额/需买入':>15}")
+    click.echo("-" * 75)
+
+    for asset in portfolio.assets:
+        target_value = total * asset.target_weight
+        diff = target_value - asset.current_value
+        action = "买入" if diff > 0 else "卖出/无需操作"
+        click.echo(
+            f"{asset.symbol:<12} {asset.target_weight:>10.2%} {target_value:>15.2f} "
+            f"{asset.current_value:>15.2f} {diff:>15.2f} ({action})"
+        )
+    click.echo("-" * 75)
+
 
 
 if __name__ == "__main__":

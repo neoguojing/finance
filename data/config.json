@@ -15,29 +15,32 @@
     "中证A500": {
       "market": "ashare",
       "metrics": {
-        "pe_percentile": 25,
-        "pb_percentile": 20,
-        "erp_percentile": 40,
-        "drawdown": 0.1
-      }
+        "pe_percentile": 50.0,
+        "pb_percentile": 50.0,
+        "erp_percentile": 50.0,
+        "drawdown": 0.0
+      },
+      "auto_update": true
     },
     "中证红利低波": {
       "market": "ashare",
       "metrics": {
-        "pe_percentile": 30,
-        "pb_percentile": 25,
-        "erp_percentile": 55,
-        "drawdown": 0.08
-      }
+        "pe_percentile": 50.0,
+        "pb_percentile": 50.0,
+        "erp_percentile": 50.0,
+        "drawdown": 0.0
+      },
+      "auto_update": true
     },
     "科创50": {
       "market": "ashare",
       "metrics": {
-        "pe_percentile": 45,
-        "pb_percentile": 40,
-        "erp_percentile": 35,
-        "drawdown": 0.2
-      }
+        "pe_percentile": 50.0,
+        "pb_percentile": 50.0,
+        "erp_percentile": 50.0,
+        "drawdown": 0.0
+      },
+      "auto_update": true
     },
     "标普500": {
       "market": "us",
@@ -47,7 +50,8 @@
         "vix": 18,
         "fed_rate_percentile": 45,
         "drawdown": 0.05
-      }
+      },
+      "auto_update": true
     },
     "纳斯达克100": {
       "market": "us",
@@ -57,7 +61,8 @@
         "vix": 18,
         "fed_rate_percentile": 45,
         "drawdown": 0.08
-      }
+      },
+      "auto_update": true
     }
   }
 }
