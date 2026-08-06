@@ -1,110 +1,297 @@
-# 家庭资产配置管理工具 (Family Asset Allocation Manager)
+# 长期 ETF 定投工具
 
-这是一个基于 Python 的家庭资产配置管理工具，旨在帮助用户通过量化的方式管理资产组合，实现资产的科学配置与定期再平衡。
+这是一个面向 **20～30 年长期 ETF 投资** 的定投计算器。它不追求复杂预测，而是用可解释、可维护、可回测的评分函数，帮助你在固定建仓期内决定：
 
-## 🚀 核心特性
+- 本期应该投入多少钱；
+- 每个 ETF/基金应该分到多少；
+- 为什么某个工具本期应该多买或少买。
 
-### 1. 资产份额自动计算
-- **目标权重管理**：用户可定义各资产类别的目标占比（如：股票 60%, 债券 30%, 现金 10%）。
-- **实时偏差分析**：自动计算当前资产价值与目标权重的偏差（Drift），清晰展示哪些资产过重或不足。
+> 说明：本项目只提供纪律化投资辅助，不构成投资建议。估值百分位、VIX、利率百分位等指标需要你定期维护或接入自己的数据源。
 
-### 2. 资产自动再平衡 (Rebalancing)
-- **目标价值法**：基于当前总资产，计算每个资产应有的目标价值。
-- **交易建议**：自动计算需要“买入”或“卖出”的具体金额，以使组合重新回到目标配置。
+## V2 架构：Data → Feature → Decision
 
----
+系统按三层拆分，避免投资算法直接依赖 PE、PB、VIX 等原始指标：
 
-## 🛠️ 快速开始
+| 层级 | 代码/文件 | 职责 |
+| :--- | :--- | :--- |
+| Data Layer | `data/weights.json`、`data/config.json`、`storage.py`、`config_loader.py` | 维护持仓、目标权重、原始市场指标和策略参数。 |
+| Feature Layer | `features.py` | 将 PE/PB/ERP/VIX/利率/回撤等原始指标转换为统一 `MarketFeatures`。 |
+| Decision Layer | `engine.py` | 只接收统一市场特征、仓位、现金和建仓期，计算本期定投金额。 |
 
-### 安装依赖
+统一特征结构：
+
+```text
+MarketFeatures(
+    valuation_score,
+    sentiment_score,
+    macro_score,
+    momentum_score,
+    volatility_score,
+)
+```
+
+这样未来要加入席勒 CAPE、巴菲特指标、信用利差、PMI、ATR 等新因子时，只需要修改 Feature Layer；Decision Layer 的定投公式可以保持稳定。
+
+## 核心公式
+
+```text
+Investment = BaseAmount × MarketMultiplier × PositionFactor × CashSafetyFactor
+```
+
+| 因子 | 含义 |
+| :--- | :--- |
+| `BaseAmount` | `剩余现金 ÷ 剩余建仓月数 × 单个工具目标权重`，保证按计划完成建仓。 |
+| `MarketMultiplier` | 市场评分映射到 `0.5 ~ 3.0`，估值便宜或市场恐慌时多买。 |
+| `PositionFactor` | `(目标仓位 - 当前仓位) ÷ 目标仓位`，越接近目标仓位买得越少。 |
+| `CashSafetyFactor` | 现金不足或最后 1 个月时降为 `0.8`，避免过度消耗现金。 |
+| `investment_ratio` | 单个工具建议金额 ÷ 本期建议总投入，用于查看本期投入比例。 |
+
+单个工具还有硬性保护：建议金额不超过剩余现金的 `max_single_invest_percent`，默认 `10%`。
+
+## 文件结构
+
+项目保留两个核心配置文件：
+
+| 文件 | 是否手工维护 | 职责 |
+| :--- | :--- | :--- |
+| `data/weights.json` | 是 | 维护资产类别、目标权重、当前持仓；这是组合结构的唯一来源。 |
+| `data/config.json` | 半自动 | 维护每个可定投工具的市场类型、原始市场指标、特征权重，以及策略级参数。可通过 `weights.json` 生成初稿。 |
+
+### `weights.json` 示例
+
+```json
+{
+  "categories": {
+    "股票": {
+      "weight": 0.6,
+      "assets": {
+        "中证A500": {"weight": 0.2, "current_value": 120000.0},
+        "标普500": {"weight": 0.15, "current_value": 80000.0}
+      }
+    }
+  }
+}
+```
+
+字段说明：
+
+- `category.weight`：资产大类目标权重，目前主要用于展示；单个工具计算直接读取工具自己的 `weight`。
+- `asset.weight`：该工具在总组合中的目标权重，例如 `0.2` 表示总资产的 20%。
+- `asset.current_value`：该工具当前持仓市值。
+
+### `config.json` 示例
+
+```json
+{
+  "max_single_invest_percent": 0.1,
+  "cash_safety": {
+    "normal": 1.0,
+    "low_cash_or_late_stage": 0.8
+  },
+  "assets": {
+    "中证A500": {
+      "market": "ashare",
+      "metrics": {
+        "pe_percentile": 25,
+        "pb_percentile": 20,
+        "erp_percentile": 40,
+        "drawdown": 0.1
+      }
+    },
+    "标普500": {
+      "market": "us",
+      "metrics": {
+        "forward_pe_percentile": 65,
+        "peg_percentile": 70,
+        "vix": 18,
+        "fed_rate_percentile": 45,
+        "drawdown": 0.05
+      }
+    }
+  }
+}
+```
+
+字段说明：
+
+- `market`：`ashare` 使用 A 股评分函数；`us` 使用美股评分函数。
+- `metrics`：该工具的市场指标。生成配置时会给默认值，但建议定期更新为真实数据。
+- `decision_weights`：Decision Layer 将统一市场特征合成为 `market_score` 时使用的权重。
+- `max_single_invest_percent`：单个工具本期投入上限，占剩余现金比例。
+- `cash_safety.normal` / `cash_safety.low_cash_or_late_stage`：正常阶段和现金紧张/最后阶段的现金安全因子。
+
+## 从 `weights.json` 生成 `config.json`
+
+当你新增或删除定投工具后，运行：
+
+```bash
+python main.py generate-config
+```
+
+生成规则：
+
+- 只为 `weights.json` 中 **股票** 类别下的工具生成定投配置。
+- 名称包含 `标普` 或 `纳斯达克` 的工具默认为 `us`。
+- 其他股票工具默认为 `ashare`。
+- 如果 `config.json` 中已有该工具的 `metrics`，生成时会保留原指标，避免覆盖你手工维护的数据。
+
+推荐流程：
+
+1. 在 `data/weights.json` 中维护目标权重和当前持仓。
+2. 运行 `python main.py generate-config` 生成或刷新可定投工具。
+3. 在 `data/config.json` 中补充/更新每个工具的估值和市场指标。
+4. 运行 `python main.py invest --cash <剩余现金> --months <剩余月数>` 得到本期定投计划。
+
+## Feature Layer：原始指标到统一特征
+
+算法不直接使用 PE、PB、VIX 等指标下单，而是先转换成统一特征：
+
+| 特征 | 含义 |
+| :--- | :--- |
+| `valuation_score` | 估值吸引力，越高代表越便宜。 |
+| `sentiment_score` | 市场情绪/恐慌程度，越高代表越恐慌。 |
+| `macro_score` | 宏观环境，当前主要由利率百分位映射。 |
+| `momentum_score` | 趋势/回撤特征，当前由近 3 年回撤映射。 |
+| `volatility_score` | 波动率特征，当前美股复用 VIX 映射，A 股使用中性默认值。 |
+
+## 评分函数
+
+### A 股：Value + Risk
+
+输入指标：
+
+| 指标 | 含义 |
+| :--- | :--- |
+| `pe_percentile` | PE 历史百分位，越低越便宜。 |
+| `pb_percentile` | PB 历史百分位，越低越便宜。 |
+| `erp_percentile` | 股债风险溢价历史百分位，越高越便宜。 |
+| `drawdown` | 距离近 3 年高点的回撤，例如 `0.1` 表示回撤 10%。 |
+
+```text
+ValueScore = 0.35 × (100 - PE%) + 0.25 × (100 - PB%) + 0.40 × ERP%
+DrawdownScore = min(drawdown / 30%, 1) × 100
+MarketScore = 0.70 × ValueScore + 0.30 × DrawdownScore
+```
+
+### 美股：Growth + Fear
+
+输入指标：
+
+| 指标 | 含义 |
+| :--- | :--- |
+| `forward_pe_percentile` | 预期 PE 历史百分位，越低越便宜。 |
+| `peg_percentile` | PEG 历史百分位，越低越便宜。 |
+| `vix` | 恐慌指数，越高代表市场恐慌越强。 |
+| `fed_rate_percentile` | 美联储利率历史百分位，越低越有利。 |
+| `drawdown` | 距离近 3 年高点的回撤。 |
+
+```text
+GrowthScore = 0.45 × (100 - ForwardPE%) + 0.30 × (100 - PEG%) + 0.25 × DrawdownScore
+VIXScore = min(VIX / 40, 1) × 100
+RateScore = 100 - FedRatePercentile
+USScore = 0.50 × GrowthScore + 0.30 × VIXScore + 0.20 × RateScore
+```
+
+### 倍率映射
+
+```text
+MarketMultiplier = 0.5 + 2.5 × MarketScore / 100
+```
+
+| MarketScore | MarketMultiplier |
+| :--- | :--- |
+| 0 | 0.5 |
+| 20 | 1.0 |
+| 40 | 1.5 |
+| 60 | 2.0 |
+| 80 | 2.5 |
+| 100 | 3.0 |
+
+## 安装与运行
+
+安装依赖：
+
 ```bash
 pip install -r requirements.txt
 ```
 
-### 配置数据
-程序将所有配置和持仓数据统一存储在 `data/weights.json` 中。
+查看持仓：
 
-**示例 `weights.json`**:
-```json
-{
-    "categories": {
-        "Stock": {
-            "weight": 0.6,
-            "assets": {
-                "US_Stock": { "weight": 0.5, "current_value": 3000.0 },
-                "CN_Stock": { "weight": 0.5, "current_value": 2000.0 }
-            }
-        },
-        "Bond": {
-            "weight": 0.4,
-            "assets": {
-                "US_Bond": { "weight": 1.0, "current_value": 4000.0 }
-            }
-        }
-    }
-}
-```
-
-### 运行命令
-由于项目结构原因，运行命令时建议将当前目录添加到 `PYTHONPATH`。
-
-#### 1. 查看当前资产状态
 ```bash
-export PYTHONPATH=$PYTHONPATH:. && python main.py status
+python main.py status
 ```
 
-#### 2. 规划资产份额
+生成或刷新配置：
+
 ```bash
-# 如果你想将总资产规划为 10000 元，查看各资产应有的份额及调整建议
-export PYTHONPATH=$PYTHONPATH:. && python main.py plan --total 10000
+python main.py generate-config
 ```
 
-#### 3. 计算再平衡建议
+计算所有定投工具的本期金额和比例：
+
 ```bash
-export PYTHONPATH=$PYTHONPATH:. && python main.py rebalance
+python main.py invest --cash 600000 --months 20
 ```
 
-#### 4. A股智能定投规划 (简化版)
+只查看指定工具：
+
 ```bash
-# 参数从 data/market_metrics.json 中读取
-export PYTHONPATH=$PYTHONPATH:. && python main.py ashare-invest --cash 600000 --months 20
+python main.py invest --cash 600000 --months 20 中证A500 标普500
 ```
 
-#### 5. 美股智能定投规划 (简化版)
+再平衡参考：
+
 ```bash
-# 参数从 data/market_metrics.json 中读取
-export PYTHONPATH=$PYTHONPATH:. && python main.py us-invest --cash 600000 --months 20
+python main.py rebalance
 ```
 
-#### 6. 批量计算所有配置资产
+运行测试：
+
 ```bash
-export PYTHONPATH=$PYTHONPATH:. && python main.py invest-all --cash 600000 --months 20
+pytest
 ```
 
----
+## Decision Layer：统一市场评分
 
-## 📖 命令行详解
+Decision Layer 默认使用下面的特征权重合成 `market_score`：
 
-| 命令 | 参数 | 说明 | 示例 |
-| :--- | :--- | :--- | :--- |
-| `status` | 无 | 显示总价值、各资产实际权重及偏差 | `python main.py status` |
-| `plan` | `--total` (必填) | 根据目标总额规划各资产份额 | `python main.py plan --total 10000` |
-| `rebalance` | 无 | 计算使组合回到目标配置的买卖金额 | `python main.py rebalance` |
-| `ashare-invest` | `--pe`, `--pb`, `--erp`, `--dd`, `--cash`, `--months` | 基于价值+风险模型的 A 股智能定投计算 | `python main.py ashare-invest --pe 20 --pb 30 --erp 70 --dd 0.15 --cash 600000 --months 20` |
-| `us-invest` | `--fpe`, `--peg`, `--vix`, `--fed`, `--dd`, `--cash`, `--months` | 基于成长+恐慌模型的 美股智能定投计算 | `python main.py us-invest --fpe 30 --peg 40 --vix 25 --fed 50 --dd 0.1 --cash 600000 --months 20` |
-
----
-
-## 📂 模块说明
-
-- `src/asset_manager/models.py`: 定义核心数据结构（资产 `Asset` 和 投资组合 `Portfolio`）。
-- `src/asset_manager/engine.py`: 实现再平衡算法和定投分配逻辑。
-- `src/asset_manager/storage.py`: 处理数据的持久化，管理 JSON 文件读写。
-- `src/asset_manager/cli.py`: 基于 `click` 提供的命令行交互界面。
-- `main.py`: 程序入口点。
-
-## 🧪 测试
-可以使用 `pytest` 运行现有测试：
-```bash
-pytest tests/
+```text
+market_score =
+  0.50 × valuation_score
++ 0.15 × sentiment_score
++ 0.15 × macro_score
++ 0.20 × momentum_score
++ 0.00 × volatility_score
 ```
+
+如需调整长期策略，只需要修改 `data/config.json` 中的 `decision_weights`。
+
+## 输出解读
+
+`invest` 命令会输出：
+
+- `本期建议总投入`：所有参与定投工具的建议金额合计。
+- `建议投入`：单个工具本期建议金额。
+- `定投比例`：单个工具建议金额占本期建议总投入的比例。
+- `市场评分`：Decision Layer 根据统一市场特征加权后的结果。
+- `市场特征`：Feature Layer 输出的估值、情绪、宏观、趋势、波动率特征。
+- `市场倍率`：市场评分映射后的连续投入倍率。
+- `仓位因子`：当前仓位距离目标仓位的比例。
+- `现金安全因子`：现金保护系数。
+
+## 常见维护动作
+
+### 新增一个定投工具
+
+1. 在 `data/weights.json` 的 `股票.assets` 中新增工具、目标权重和当前持仓。
+2. 运行 `python main.py generate-config`。
+3. 在 `data/config.json` 中检查 `market` 是否正确，并补充真实 `metrics`。
+4. 运行 `python main.py invest --cash ... --months ...` 查看建议。
+
+### 更新市场指标
+
+直接编辑 `data/config.json` 中对应工具的 `metrics`。如果之后再次运行 `generate-config`，已有指标会被保留。
+
+### 更新当前持仓
+
+直接编辑 `data/weights.json` 中对应工具的 `current_value`，再运行 `status` 或 `invest`。

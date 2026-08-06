@@ -1,188 +1,153 @@
-from typing import Dict, List, Any, Optional
-from .models import Asset, Portfolio
+from typing import Any, Dict
+
 from .config_loader import ConfigLoader
+from .features import MarketFeatureEngine, MarketFeatures
+from .models import Portfolio
+
 
 class Rebalancer:
-    """
-    Rebalance calculation class: calculates trades needed to restore portfolio weights.
-    """
+    """计算组合回到目标权重所需的买卖金额。"""
+
     @staticmethod
     def calculate_rebalance_amounts(portfolio: Portfolio) -> Dict[str, float]:
         total_value = portfolio.get_total_value()
         if total_value == 0:
             return {asset.symbol: 0.0 for asset in portfolio.assets}
+        return {
+            asset.symbol: total_value * asset.target_weight - asset.current_value
+            for asset in portfolio.assets
+        }
 
-        rebalance_amounts = {}
-        for asset in portfolio.assets:
-            target_value = total_value * asset.target_weight
-            rebalance_amounts[asset.symbol] = target_value - asset.current_value
-
-        return rebalance_amounts
 
 class DCAEngine:
-    """
-    DCA Execution Engine: calculates allocation of new funds across assets based on individual ETF configurations.
-    """
+    """长期 ETF 定投评分引擎。"""
+
     def __init__(self, config_loader: ConfigLoader):
         self.config_loader = config_loader
 
-    def _calculate_drawdown_score(self, drawdown: float) -> float:
-        """Calculate drawdown score (0-100)."""
-        return min(drawdown / 0.3, 1.0) * 100
+    @staticmethod
+    def market_score(features: MarketFeatures, weights: Dict[str, float] = None) -> float:
+        """Decision Layer 只依赖统一特征，不直接依赖 PE/PB/VIX 等原始指标。"""
+        weights = weights or {
+            "valuation_score": 0.50,
+            "sentiment_score": 0.15,
+            "macro_score": 0.15,
+            "momentum_score": 0.20,
+            "volatility_score": 0.00,
+        }
+        values = features.to_dict()
+        return sum(values[key] * weight for key, weight in weights.items())
 
-    def _calculate_position_factor(self, target_position: float, current_position: float) -> float:
-        """Calculate position correction factor (0-1)."""
-        if target_position is None or target_position <= 0:
+    @staticmethod
+    def market_multiplier(score: float) -> float:
+        """连续倍率函数：评分 0~100 映射为 0.5~3.0。"""
+        return 0.5 + 2.5 * max(0.0, min(score, 100.0)) / 100
+
+    @staticmethod
+    def position_factor(target_position: float, current_position: float) -> float:
+        """仓位修正：越接近目标仓位，买入越少。"""
+        if target_position <= 0:
             return 1.0
-        factor = (target_position - current_position) / target_position
-        return max(0.0, factor)
+        return max(0.0, min((target_position - current_position) / target_position, 1.0))
 
-    def _calculate_cash_safety_factor(self, cash_remaining: float, months_left: int, config: Dict[str, Any]) -> float:
-        """Calculate cash safety factor based on configured thresholds."""
-        factors = config.get("cash_safety_factors", [])
-        # Sort by threshold descending to find the highest applicable threshold first
-        sorted_factors = sorted(factors, key=lambda x: x['threshold_months'], reverse=True)
+    def cash_safety_factor(self, cash_remaining: float, months_left: int) -> float:
+        """现金安全：现金不足或接近建仓结束时降低投入。"""
+        settings = self.config_loader.get_setting("cash_safety", {})
+        if cash_remaining <= 0 or months_left <= 1:
+            return settings.get("low_cash_or_late_stage", 0.8)
+        return settings.get("normal", 1.0)
 
-        for entry in sorted_factors:
-            if months_left > entry['threshold_months']:
-                return entry['factor']
-        return 0.8  # Fallback
-
-    def calculate_smart_invest(
+    def calculate_investment(
         self,
         symbol: str,
-        market_metrics: Dict[str, float],
         cash_remaining: float,
         months_left: int,
-        target_position: float = None,
-        current_position: float = 0.0
+        current_position: float,
+        target_weight: float,
+        planned_total: float,
     ) -> Dict[str, Any]:
-        """
-        Unified smart investment calculation function.
-        Uses asset-specific configuration from the loaded config file.
-        """
-        params = self.config_loader.get_asset_config(symbol)
-        if not params:
-            return {"error": f"No configuration found for {symbol}"}
+        asset = self.config_loader.get_asset_config(symbol)
+        if not asset:
+            return {"error": f"未找到定投资产配置: {symbol}"}
 
-        # 1. BaseAmount: Ensure completion of construction by target date
-        base_amount = cash_remaining / months_left if months_left > 0 else 0
-
-        # Common parameters from the specific asset config
-        max_inv_percent = params.get("max_investment_percent", 0.1)
-        cash_safety_factor = self._calculate_cash_safety_factor(cash_remaining, months_left, params)
-        position_factor = self._calculate_position_factor(target_position, current_position)
-
-        asset_type = params.get("type", "ashare")
-        drawdown = market_metrics.get("drawdown", 0.0)
-        drawdown_score = self._calculate_drawdown_score(drawdown)
-
-        market_multiplier = 1.0
-        market_score = 0.0
-
-        if asset_type == "ashare":
-            # A-share specific logic using parameters from JSON
-            pe_p = market_metrics.get("pe_percentile", 50.0)
-            pb_p = market_metrics.get("pb_percentile", 50.0)
-            erp_p = market_metrics.get("erp_percentile", 50.0)
-
-            value_score = (params['pe_weight'] * (100 - pe_p) +
-                           params['pb_weight'] * (100 - pb_p) +
-                           params['erp_weight'] * erp_p)
-
-            market_score = (params['market_score_value_weight'] * value_score +
-                            params['market_score_drawdown_weight'] * drawdown_score)
-
-            market_multiplier = (params['multiplier_base'] +
-                                 params['multiplier_factor'] * (market_score / 100))
-
-        elif asset_type == "usshare":
-            # US-share specific logic using parameters from JSON
-            fpe_p = market_metrics.get("forward_pe_percentile", 50.0)
-            peg_p = market_metrics.get("peg_percentile", 50.0)
-            vix = market_metrics.get("vix", 20.0)
-            fed_rate_p = market_metrics.get("fed_rate_percentile", 50.0)
-
-            growth_score = (params['forward_pe_weight'] * (100 - fpe_p) +
-                            params['peg_weight'] * (100 - peg_p) +
-                            params['drawdown_weight'] * drawdown_score)
-
-            vix_score = min(vix / 40, 1.0) * 100
-            rate_score = 100 - fed_rate_p
-
-            market_score = (params['us_score_growth_weight'] * growth_score +
-                            params['us_score_vix_weight'] * vix_score +
-                            params['us_score_rate_weight'] * rate_score)
-
-            market_multiplier = (params['multiplier_base'] +
-                                 params['multiplier_factor'] * (market_score / 10_0)) # Note: using 100.0 is cleaner, but 1000 is what I wrote before? Let's stick to 100.0
-
-        # Final decision formula calculation
-        investment = base_amount * market_multiplier * position_factor * cash_safety_factor
-
-        # Hard limit: single investment does not exceed 10% of remaining cash (from config)
-        final_investment = min(investment, cash_remaining * max_inv_percent)
+        base = cash_remaining / months_left * target_weight if months_left > 0 else 0.0
+        target_position = planned_total * target_weight
+        metrics = self.config_loader.get_market_metrics(symbol)
+        market = asset.get("market")
+        features = MarketFeatureEngine.build(market, metrics)
+        score = self.market_score(features, self.config_loader.get_feature_weights(symbol))
+        multiplier = self.market_multiplier(score)
+        position = self.position_factor(target_position, current_position)
+        safety = self.cash_safety_factor(cash_remaining, months_left)
+        raw = base * multiplier * position * safety
+        max_percent = self.config_loader.get_setting("max_single_invest_percent", 0.10)
+        final = min(raw, cash_remaining * max_percent)
 
         return {
-            "final_investment": final_investment,
-            "scores": {
-                "base_amount": base_amount,
-                "market_multiplier": market_multiplier,
-                "position_factor": position_factor,
-                "cash_safety_factor": cash_safety_factor,
-                "market_score": market_score,
-                "drawdown_score": drawdown_score
-            }
+            "symbol": symbol,
+            "investment": final,
+            "investment_ratio": 0.0,
+            "base_amount": base,
+            "target_position": target_position,
+            "market_multiplier": multiplier,
+            "position_factor": position,
+            "cash_safety_factor": safety,
+            "market_score": score,
+            "features": features.to_dict(),
         }
+
+    def calculate_plan(self, portfolio: Portfolio, cash_remaining: float, months_left: int) -> Dict[str, Any]:
+        planned_total = portfolio.get_total_value() + cash_remaining
+        dca_symbols = set(self.config_loader.get_assets())
+        results = []
+        for asset in portfolio.assets:
+            if asset.symbol not in dca_symbols:
+                continue
+            result = self.calculate_investment(
+                symbol=asset.symbol,
+                cash_remaining=cash_remaining,
+                months_left=months_left,
+                current_position=asset.current_value,
+                target_weight=asset.target_weight,
+                planned_total=planned_total,
+            )
+            if "error" not in result:
+                results.append(result)
+
+        total_investment = sum(item["investment"] for item in results)
+        for item in results:
+            item["investment_ratio"] = item["investment"] / total_investment if total_investment > 0 else 0.0
+        return {"total_investment": total_investment, "items": results}
 
     @staticmethod
     def calculate_contribution_split(portfolio: Portfolio, amount: float, rule: str = "target") -> Dict[str, float]:
-        """
-        根据指定的规则计算新资金的分配份额。
-        """
         if not portfolio.assets:
             return {}
-
-        # 规则 1: 比例分配 (Target Rule)
         if rule == "target":
             return {asset.symbol: amount * asset.target_weight for asset in portfolio.assets}
-
-        # 规则 2: 智能分配 (Smart Rule)
-        elif rule == "smart":
-            total_value = portfolio.get_total_value()
-            if total_value == 0:
-                return {asset.symbol: amount * asset.target_weight for asset in portfolio.assets}
-
-            drifts = []
-            for asset in portfolio.assets:
-                current_weight = asset.calculate_current_weight(total_value)
-                drift = asset.target_weight - current_weight
-                drifts.append({'symbol': asset.symbol, 'drift': drift, 'target_weight': asset.target_weight})
-
-            drifts.sort(key=lambda x: x['drift'], reverse=True)
-
-            allocation = {asset.symbol: 0.0 for asset in portfolio.assets}
-            remaining_amount = amount
-
-            for item in drifts:
-                if remaining_amount <= 0:
-                    break
-
-                target_value_with_new_funds = (total_value + amount) * item['target_weight']
-                current_val = next(a.current_value for a in portfolio.assets if a.symbol == item['symbol'])
-                needed = target_value_with_new_funds - current_val
-
-                if needed > 0:
-                    investment = min(needed, remaining_amount)
-                    allocation[item['symbol']] = investment
-                    remaining_amount -= investment
-
-            if remaining_amount > 0:
-                for asset in portfolio.assets:
-                    allocation[asset.symbol] += remaining_amount * asset.target_weight
-                remaining_amount = 0
-
-            return allocation
-
-        else:
+        if rule != "smart":
             raise ValueError(f"未知规则: {rule}")
+
+        total_value = portfolio.get_total_value()
+        if total_value == 0:
+            return {asset.symbol: amount * asset.target_weight for asset in portfolio.assets}
+
+        allocation = {asset.symbol: 0.0 for asset in portfolio.assets}
+        remaining = amount
+        for asset in sorted(
+            portfolio.assets,
+            key=lambda item: item.target_weight - item.calculate_current_weight(total_value),
+            reverse=True,
+        ):
+            if remaining <= 0:
+                break
+            needed = (total_value + amount) * asset.target_weight - asset.current_value
+            if needed > 0:
+                buy = min(needed, remaining)
+                allocation[asset.symbol] = buy
+                remaining -= buy
+
+        if remaining > 0:
+            for asset in portfolio.assets:
+                allocation[asset.symbol] += remaining * asset.target_weight
+        return allocation
