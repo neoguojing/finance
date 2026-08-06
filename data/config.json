@@ -1,0 +1,37 @@
+{
+  "510300.SH": {
+    "type": "ashare",
+    "pe_weight": 0.35,
+    "pb_weight": 0.25,
+    "erp_weight": 0.40,
+    "market_score_value_weight": 0.7,
+    "market_score_drawdown_weight": 0.3,
+    "multiplier_base": 0.5,
+    "multiplier_factor": 2.5,
+    "max_investment_percent": 0.1,
+    "cash_safety_factors": [
+      {"threshold_months": 6, "factor": 1.0},
+      {"threshold_months": 3, "factor": 0.95},
+      {"threshold_months": 1, "factor": 0.9},
+      {"threshold_months": 0, "factor": 0.8}
+    ]
+  },
+  "VOO": {
+    "type": "usshare",
+    "forward_pe_weight": 0.45,
+    "peg_weight": 0.30,
+    "drawdown_weight": 0.25,
+    "us_score_growth_weight": 0.50,
+    "us_score_vix_weight": 0.30,
+    "us_score_rate_weight": 0.20,
+    "multiplier_base": 0.5,
+    "multiplier_factor": 2.5,
+    "max_investment_percent": 0.1,
+    "cash_safety_factors": [
+      {"threshold_months": 6, "factor": 1.0},
+      {"threshold_months": 3, "factor": 0.95},
+      {"threshold_months": 1, "factor": 0.9},
+      {"threshold_months": 0, "factor": 0.8}
+    ]
+  }
+}

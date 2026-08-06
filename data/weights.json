@@ -1,0 +1,64 @@
+{
+    "categories": {
+        "现金": {
+            "weight": 0.05,
+            "assets": {
+                "货币基金": {
+                    "weight": 0.05,
+                    "current_value": 0.0
+                }
+            }
+        },
+        "债券": {
+            "weight": 0.25,
+            "assets": {
+                "储蓄国债": {
+                    "weight": 0.08,
+                    "current_value": 0.0
+                },
+                "国债ETF": {
+                    "weight": 0.12,
+                    "current_value": 0.0
+                },
+                "短债基金": {
+                    "weight": 0.05,
+                    "current_value": 0.0
+                }
+            }
+        },
+        "黄金": {
+            "weight": 0.1,
+            "assets": {
+                "黄金ETF": {
+                    "weight": 0.1,
+                    "current_value": 0.0
+                }
+            }
+        },
+        "股票": {
+            "weight": 0.6,
+            "assets": {
+                "中证A500": {
+                    "weight": 0.2,
+                    "current_value": 0.0
+                },
+                "中证红利低波": {
+                    "weight": 0.1,
+                    "current_value": 0.0
+                },
+                "科创50": {
+                    "weight": 0.05,
+                    "current_value": 0.0
+                },
+                "标普500": {
+                    "weight": 0.15,
+                    "current_value": 0.0
+                },
+                "纳斯达克100": {
+                    "weight": 0.1,
+                    "current_value": 0.0
+                }
+            }
+        }
+    }
+}
