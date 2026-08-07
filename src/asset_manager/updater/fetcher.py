@@ -1,8 +1,16 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
+import requests
 import yfinance as yf
 import efinance as ef
 
+session = requests.Session()
+session.headers.update(
+    {
+        "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+    }
+)
 class BaseFetcher(ABC):
     """数据抓取器基类。"""
 
@@ -17,7 +25,7 @@ class USFetcher(BaseFetcher):
 
     def fetch_metrics(self, symbol: str) -> Dict[str, float]:
         try:
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(symbol,session=session)
             info = ticker.info
             return {
                 "forward_pe_percentile": info.get("forwardPE", 20.0) / 100,

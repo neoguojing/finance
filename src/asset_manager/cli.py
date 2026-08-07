@@ -88,17 +88,46 @@ def plan(total: float):
     click.echo(f"{'资产':<12} {'目标权重':>10} {'目标价值':>15} {'当前价值':>15} {'差额/需买入':>15}")
     click.echo("-" * 75)
 
+    category_investments = {}
+    total_investment = 0.0
+
     for asset in portfolio.assets:
         target_value = total * asset.target_weight
         diff = target_value - asset.current_value
         action = "买入" if diff > 0 else "卖出/无需操作"
+
+        if diff > 0:
+            category_investments[asset.category] = category_investments.get(asset.category, 0.0) + diff
+            total_investment += diff
+
         click.echo(
             f"{asset.symbol:<12} {asset.target_weight:>10.2%} {target_value:>15.2f} "
             f"{asset.current_value:>15.2f} {diff:>15.2f} ({action})"
         )
     click.echo("-" * 75)
 
+    click.echo("\n投资统计:")
+    click.echo("一级分类投入:")
+    for category, amount in category_investments.items():
+        click.echo(f"  - {category}: {amount:.2f}")
+    click.echo(f"二级资产总投入: {total_investment:.2f}")
 
+
+@cli.command()
+@click.option("--cash", type=float, required=True, help="剩余现金")
+@click.option("--months", type=int, required=True, help="剩余建仓月数")
+@click.argument("symbols", nargs=-1)
+def invest(cash, months, symbols):
+    """计算定投金额和每个工具的定投比例。不传 SYMBOL 时计算全部定投资产。"""
+    engine = DCAEngine(config_loader)
+    portfolio = storage.load_portfolio()
+    plan = engine.calculate_plan(portfolio, cash, months)
+    items = plan["items"]
+    if symbols:
+        items = [item for item in items if item["symbol"] in symbols]
+    click.echo(f"本期建议总投入: {sum(item['investment'] for item in items):.2f}")
+    for result in items:
+        print_investment(result)
 
 if __name__ == "__main__":
     cli()
