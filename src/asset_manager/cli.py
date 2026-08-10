@@ -93,8 +93,15 @@ def plan(total: float):
 
     for asset in portfolio.assets:
         target_value = total * asset.target_weight
-        diff = target_value - asset.current_value
-        action = "买入" if diff > 0 else "卖出/无需操作"
+        current_weight = asset.current_value / total if total > 0 else 0
+
+        # 考虑份额超过或减少预定份额 5% 才显示调仓金额
+        if abs(current_weight - asset.target_weight) > 0.05 * asset.target_weight:
+            diff = target_value - asset.current_value
+            action = "买入" if diff > 0 else "卖出"
+        else:
+            diff = 0.0
+            action = "无需操作"
 
         if diff > 0:
             category_investments[asset.category] = category_investments.get(asset.category, 0.0) + diff
