@@ -11,9 +11,20 @@ config_loader = ConfigLoader()
 
 
 def print_investment(result):
-    click.echo(f"\n{result['symbol']}")
-    click.echo(f"  建议投入: {result['investment']:.2f}")
-    click.echo(f"  定投比例: {result['investment_ratio']:.2%}")
+    symbol = result['symbol']
+    investment = result['investment']
+    base_amount = result['base_amount']
+
+    click.echo(f"\n{symbol}")
+
+    if symbol in ["标普500", "纳斯达克100"]:
+        usd_investment = investment / 7.0
+        usd_base = base_amount / 7.0
+        click.echo(f"  建议投入 (USD): {usd_investment:.2f} (基准 1.0x: {usd_base:.2f})")
+    else:
+        click.echo(f"  建议投入: {investment:.2f} (基准 1.0x: {base_amount:.2f})")
+
+    click.echo(f"  本期资金分配比例: {result['investment_ratio']:.2%} (占本期总投入)")
     click.echo(f"  市场倍率: {result['multiplier']:.2f}")
     click.echo(f"  计算理由: {result['reason']}")
 
@@ -108,6 +119,7 @@ def invest(symbols):
     if symbols:
         items = [item for item in items if item["symbol"] in symbols]
     click.echo(f"本期建议总投入: {sum(item['investment'] for item in items):.2f}")
+    click.echo(f" (注: '本期资金分配比例' 指该资产投入占总投入的比例，所有资产比例之和为 100%)")
     for result in items:
         print_investment(result)
 
