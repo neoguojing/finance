@@ -1,16 +1,4 @@
 {
-  "max_single_invest_percent": 0.1,
-  "cash_safety": {
-    "normal": 1.0,
-    "low_cash_or_late_stage": 0.8
-  },
-  "decision_weights": {
-    "valuation_score": 0.5,
-    "sentiment_score": 0.15,
-    "macro_score": 0.15,
-    "momentum_score": 0.2,
-    "volatility_score": 0.0
-  },
   "assets": {
     "中证A500": {
       "market": "ashare",

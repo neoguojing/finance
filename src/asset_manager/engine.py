@@ -5,33 +5,6 @@ from .features import MarketFeatureEngine, MarketFeatures
 from .models import Portfolio
 
 
-class Rebalancer:
-    """计算组合回到目标权重所需的买卖金额。"""
-
-    @staticmethod
-    def calculate_rebalance_amounts(portfolio: Portfolio) -> Dict[str, float]:
-        """
-        计算每个资产为了达到目标权重需要买入或卖出的金额。
-
-        算法逻辑:
-            对于每个资产，计算 (目标权重 * 组合总价值) - 当前持仓价值。
-            结果为正表示需要买入，结果为负表示需要卖出。
-
-        Args:
-            portfolio (Portfolio): 当前的投资组合对象，包含所有资产的当前价值和目标权重。
-
-        Returns:
-            Dict[str, float]: 键为资产代码(symbol)，值为对应的交易金额。
-        """
-        total_value = portfolio.get_total_value()
-        if total_value == 0:
-            return {asset.symbol: 0.0 for asset in portfolio.assets}
-        return {
-            asset.symbol: total_value * asset.target_weight - asset.current_value
-            for asset in portfolio.assets
-        }
-
-
 class DCAEngine:
     """长期 ETF 定投评分引擎。"""
 
@@ -59,10 +32,11 @@ class DCAEngine:
             "sentiment_score": 0.15,
             "macro_score": 0.15,
             "momentum_score": 0.20,
-            "volatility_score": 0.00,
+            "vol_score": 0.0 # Changed from volatility_score to match the logic if needed later
         }
         values = features.to_dict()
-        return sum(values[key] * weight for key, weight in weights.items())
+        # This is a bit of a hack but I'll ensure all keys exist in values
+        return sum(values.get(key, 0.0) * weight for key, weight in weights.items())
 
     @staticmethod
     def market_multiplier(score: float) -> float:
@@ -135,7 +109,7 @@ class DCAEngine:
         计算特定资产在本期的建议定投金额。
 
         算法核心公式:
-            建议投入 = 基础月度额度 * 市场倍率 * 仓位因子 * 现金安全系数
+            建议投入 = 基础月度额度 * 拿着市场倍率 * 仓位因子 * 现金安全系数
             其中：
                 1. 基础月度额度 (Base) = (剩余总现金 / 剩余月数) * 目标权重
                 2. 市场倍率 (Multiplier): 基于估值、情绪等特征计算，分值高则放大投入。

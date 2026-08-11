@@ -1,7 +1,7 @@
 import click
 
 from .config_loader import ConfigLoader
-from .engine import DCAEngine, Rebalancer
+from .engine import DCAEngine
 from .storage import DataManager
 from .updater.updater import ConfigUpdater
 
@@ -49,13 +49,7 @@ def status():
         click.echo(f"{asset.symbol:<12} {asset.current_value:>12.2f} {asset.target_weight:>10.2%} {current_weight:>10.2%}")
 
 
-@cli.command()
-def rebalance():
-    """按目标权重计算再平衡金额。"""
-    amounts = Rebalancer.calculate_rebalance_amounts(storage.load_portfolio())
-    for symbol, amount in amounts.items():
-        action = "买入" if amount > 0 else "卖出" if amount < 0 else "无需操作"
-        click.echo(f"{symbol}: {action} {abs(amount):.2f}")
+
 
 
 @cli.command("sync-config")
