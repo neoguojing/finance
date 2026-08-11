@@ -11,25 +11,11 @@ config_loader = ConfigLoader()
 
 
 def print_investment(result):
-    features = result["features"]
     click.echo(f"\n{result['symbol']}")
     click.echo(f"  建议投入: {result['investment']:.2f}")
     click.echo(f"  定投比例: {result['investment_ratio']:.2%}")
-    click.echo(
-        "  市场评分: "
-        f"{result['market_score']:.2f}"
-    )
-    click.echo(
-        "  市场特征: "
-        f"估值={features['valuation_score']:.2f}, "
-        f"情绪={round(features['sentiment_score'], 2):.2f}, " # Added rounding to be safe
-        f"宏观={features['macro_score']:.2f}, "
-        f"趋势={features['momentum_score']:.2f}, "
-        f"波动={features['volatility_score']:.2f}"
-    )
-    click.echo(f"  市场倍率: {result['market_multiplier']:.2f}")
-    click.echo(f"  仓位因子: {result['position_factor']:.2f}")
-    click.echo(f"  现金安全因子: {result['cash_safety_factor']:.2f}")
+    click.echo(f"  市场倍率: {result['multiplier']:.2f}")
+    click.echo(f"  计算理由: {result['reason']}")
 
 
 @click.group()
@@ -47,9 +33,6 @@ def status():
     for asset in portfolio.assets:
         current_weight = asset.calculate_current_weight(total)
         click.echo(f"{asset.symbol:<12} {asset.current_value:>12.2f} {asset.target_weight:>10.2%} {current_weight:>10.2%}")
-
-
-
 
 
 @cli.command("sync-config")
@@ -115,14 +98,12 @@ def plan(total: float):
 
 
 @cli.command()
-@click.option("--cash", type=float, required=True, help="剩余现金")
-@click.option("--months", type=int, required=True, help="剩余建仓月数")
 @click.argument("symbols", nargs=-1)
-def invest(cash, months, symbols):
+def invest(symbols):
     """计算定投金额和每个工具的定投比例。不传 SYMBOL 时计算全部定投资产。"""
     engine = DCAEngine(config_loader)
     portfolio = storage.load_portfolio()
-    plan = engine.calculate_plan(portfolio, cash, months)
+    plan = engine.calculate_plan(portfolio)
     items = plan["items"]
     if symbols:
         items = [item for item in items if item["symbol"] in symbols]

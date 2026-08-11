@@ -27,13 +27,6 @@ class ConfigLoader:
         return {
             "max_single_invest_percent": 0.1,
             "cash_safety": {"normal": 1.0, "low_cash_or_late_stage": 0.8},
-            "decision_weights": {
-                "valuation_score": 0.50,
-                "sentiment_score": 0.15,
-                "macro_score": 0.15,
-                "momentum_score": 0.20,
-                "volatility_score": 0.00,
-            },
             "assets": {},
         }
 
@@ -104,7 +97,6 @@ class ConfigLoader:
         config = self.default_config()
         config["max_single_invest_percent"] = self.get_setting("max_single_invest_percent", 0.1)
         config["cash_safety"] = self.get_setting("cash_safety", config["cash_safety"])
-        config["decision_weights"] = self.get_setting("decision_weights", config["decision_weights"])
         old_assets = self.get_assets()
 
         for category, category_data in weights.get("categories", {}).items():
@@ -138,11 +130,6 @@ class ConfigLoader:
         """获取特定资产当前的各类市场度量指标 (如 PE 分位)。"""
         asset = self.get_asset_config(symbol) or {}
         return asset.get("metrics", {})
-
-    def get_feature_weights(self, symbol: str) -> Dict[str, float]:
-        """获取针对特定资产计算得分时使用的特征权重设置。"""
-        asset = self.get_asset_config(symbol) or {}
-        return asset.get("decision_weights", self.get_setting("decision_weights", {}))
 
     def get_setting(self, key: str, default: Any = None) -> Any:
         """从配置字典中安全地提取单项设置参数。"""

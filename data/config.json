@@ -3,54 +3,78 @@
     "中证A500": {
       "market": "ashare",
       "metrics": {
-        "pe_percentile": 50.0,
-        "pb_percentile": 50.0,
-        "erp_percentile": 50.0,
-        "drawdown": 0.0
+        "pe_percentile": 86.0
       },
-      "auto_update": true
-    },
-    "中证红利低波": {
-      "market": "ashare",
-      "metrics": {
-        "pe_percentile": 50.0,
-        "pb_percentile": 50.0,
-        "erp_percentile": 50.0,
-        "drawdown": 0.0
-      },
-      "auto_update": true
+      "auto_update": true,
+      "investment_config": {
+        "total_investment": 320000.0,
+        "total_months": 24,
+        "indicator": "pe_percentile",
+        "rules": [
+          {"min": 0, "max": 20, "multiplier": 2.0},
+          {"min": 20, "max": 30, "multiplier": 1.5},
+          {"min": 30, "max": 50, "multiplier": 1.0},
+          {"min": 50, "max": 80, "multiplier": 0.5},
+          {"min": 80, "max": 100, "multiplier": 0.3}
+        ]
+      }
     },
     "科创50": {
       "market": "ashare",
       "metrics": {
-        "pe_percentile": 50.0,
-        "pb_percentile": 50.0,
-        "erp_percentile": 50.0,
-        "drawdown": 0.0
+        "pe_percentile": 50.0
       },
-      "auto_update": true
+      "auto_update": true,
+      "investment_config": {
+        "total_investment": 100000.0,
+        "total_months": 24,
+        "indicator": "pe_percentile",
+        "rules": [
+          {"min": 0, "max": 20, "multiplier": 2.0},
+          {"min": 20, "max": 40, "multiplier": 1.5},
+          {"min": 40, "max": 60, "multiplier": 1.0},
+          {"min": 60, "max": 80, "multiplier": 0.7},
+          {"min": 80, "max": 100, "multiplier": 0.5}
+        ]
+      }
     },
     "标普500": {
       "market": "us",
       "metrics": {
-        "forward_pe_percentile": 65,
-        "peg_percentile": 70,
-        "vix": 18,
-        "fed_rate_percentile": 45,
-        "drawdown": 0.05
+        "shiller_pe_ratio": 42.37
       },
-      "auto_update": true
+      "auto_update": true,
+      "investment_config": {
+        "total_investment": 230000.0,
+        "total_months": 24,
+        "indicator": "shiller_pe_ratio",
+        "rules": [
+          {"min": 0, "max": 25, "multiplier": 2},
+          {"min": 25, "max": 30, "multiplier": 1.5},
+          {"min": 30, "max": 35, "multiplier": 1.0},
+          {"min": 35, "max": 40, "multiplier": 0.5},
+          {"min": 40, "max": 100, "multiplier": 0.3}
+        ]
+      }
     },
     "纳斯达克100": {
       "market": "us",
       "metrics": {
-        "forward_pe_percentile": 75,
-        "peg_percentile": 80,
-        "vix": 18,
-        "fed_rate_percentile": 45,
-        "drawdown": 0.08
+        "forward_pe_percentile": 41.7
       },
-      "auto_update": true
+      "auto_update": true,
+      "investment_config": {
+        "total_investment": 150000.0,
+        "total_months": 24,
+        "indicator": "forward_pe_percentile",
+        "rules": [
+          {"min": 0, "max": 20, "multiplier": 2},
+          {"min": 20, "max": 40, "multiplier": 1.5},
+          {"min": 40, "max": 60, "multiplier": 1.0},
+          {"min": 60, "max": 80, "multiplier": 0.5},
+          {"min": 80, "max": 100, "multiplier": 0.3}
+        ]
+      }
     }
   }
 }
