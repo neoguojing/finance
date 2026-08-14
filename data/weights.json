@@ -10,24 +10,24 @@
       "weight": 0.25,
       "assets": {
         "储蓄国债": {"weight": 0.08, "current_value": 0.0},
-        "国债ETF": {"weight": 0.12, "current_value": 0.0},
+        "国债ETF": {"weight": 0.12, "current_value": 27108.0},
         "短债基金": {"weight": 0.05, "current_value": 78000.0}
       }
     },
     "黄金": {
       "weight": 0.1,
       "assets": {
-        "黄金ETF": {"weight": 0.1, "current_value": 0.0}
+        "黄金ETF": {"weight": 0.1, "current_value": 24718.0}
       }
     },
     "股票": {
       "weight": 0.6,
       "assets": {
-        "中证A500": {"weight": 0.2, "current_value": 0},
-        "中证红利低波": {"weight": 0.1, "current_value": 0},
+        "中证A500": {"weight": 0.2, "current_value": 30052.0},
+        "中证红利低波": {"weight": 0.1, "current_value": 29969.0},
         "其他": {"weight": 0.05, "current_value": 150000.0},
-        "标普500": {"weight": 0.15, "current_value": 0},
-        "纳斯达克100": {"weight": 0.1, "current_value": 0}
+        "标普500": {"weight": 0.15, "current_value": 5600.0},
+        "纳斯达克100": {"weight": 0.1, "current_value": 4200.0}
       }
     }
   }

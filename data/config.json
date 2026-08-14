@@ -45,7 +45,7 @@
       },
       "investment_config": {
         "total_investment": 230000.0,
-        "initial_investment": 30000.0,
+        "initial_investment": 5600.0,
         "total_months": 24,
         "indicator": "shiller_pe_ratio",
         "rules": [
@@ -64,7 +64,7 @@
       },
       "investment_config": {
         "total_investment": 150000.0,
-        "initial_investment": 30000.0,
+        "initial_investment": 4200.0,
         "total_months": 24,
         "indicator": "forward_pe_percentile",
         "rules": [
